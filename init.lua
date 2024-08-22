@@ -626,6 +626,23 @@ require('lazy').setup({
           end,
         },
       }
+
+      -- Add Python-specific LSP setup
+      local lspCapabilities = vim.lsp.protocol.make_client_capabilities()
+      lspCapabilities.textDocument.completion.completionItem.snippetSupport = True
+
+      require('lspconfig').pyright.setup {
+        capabilities = lspCapabilities,
+      }
+
+      require('lspconfig').ruff.setup {
+        settings = {
+          organizeImports = false,
+        },
+        on_attach = function(client)
+          client.server_capabilities.hoverProvider = false
+        end,
+      }
     end,
   },
 
@@ -657,9 +674,8 @@ require('lazy').setup({
       end,
       formatters_by_ft = {
         lua = { 'stylua' },
+        python = { 'isort', 'black' },
         -- Conform can also run multiple formatters sequentially
-        -- python = { "isort", "black" },
-        --
         -- You can use 'stop_after_first' to run the first available formatter from the list
         -- javascript = { "prettierd", "prettier", stop_after_first = true },
       },
@@ -844,7 +860,23 @@ require('lazy').setup({
     'nvim-treesitter/nvim-treesitter',
     build = ':TSUpdate',
     opts = {
-      ensure_installed = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc' },
+      ensure_installed = {
+        'bash',
+        'c',
+        'diff',
+        'html',
+        'lua',
+        'luadoc',
+        'markdown',
+        'markdown_inline',
+        'query',
+        'vim',
+        'vimdoc',
+        'python',
+        'toml',
+        'rst',
+        'ninja',
+      },
       -- Autoinstall languages that are not installed
       auto_install = true,
       highlight = {
@@ -890,9 +922,81 @@ require('lazy').setup({
   -- NOTE: The import below can automatically add your own plugins, configuration, etc from `lua/custom/plugins/*.lua`
   --    This is the easiest way to modularize your config.
   --
-  --  Uncomment the following line and add your plugins to `lua/custom/plugins/*.lua` to get going.
-  --    For additional information, see `:help lazy.nvim-lazy.nvim-structuring-your-plugins`
-  -- { import = 'custom.plugins' },
+  -- Python-specific plugins
+  { -- Mason Tool Installer
+    'WhoIsSethDaniel/mason-tool-installer.nvim',
+    opts = {
+      ensure_installed = {
+        'pyright',
+        'ruff',
+        'debugpy',
+        'black',
+        'isort',
+        'taplo',
+      },
+    },
+  },
+  { -- Python Debugger
+    'mfussenegger/nvim-dap-python',
+    dependencies = 'mfussenegger/nvim-dap',
+    config = function()
+      local debugpyPythonPath = require('mason-registry').get_package('debugpy'):get_install_path() .. '/venv/bin/python3'
+      require('dap-python').setup(debugpyPythonPath, {})
+    end,
+  },
+  { -- REPL
+    'Vigemus/iron.nvim',
+    main = 'iron.core',
+    config = function()
+      require('iron.core').setup({
+        config = {
+          -- This defines how the REPL is opened. Here, we set the REPL window
+          -- to open in a horizontal split to the bottom, with a height of 10.
+          repl_open_cmd = 'horizontal bot 10 split',
+
+          -- This defines which binary to use for the REPL. If `ipython` is
+          -- available, it will use `ipython`, otherwise it will use `python3`
+          repl_definition = {
+            python = {
+              command = function()
+                local ipythonAvailable = vim.fn.executable("ipython") == 1
+                local binary = ipythonAvailable and "ipython" or "python3"
+                return { binary }
+              end,
+            },
+          },
+        },
+        keymaps = {
+          send_line = "++",
+          visual_send = "+",
+          send_motion = "+",
+        },
+      })
+    end,
+    keys = {
+      { "<leader>i", "<cmd>IronRepl<cr>", desc = "Toggle REPL" },
+      { "<leader>I", "<cmd>IronRestart<cr>", desc = "Restart REPL" },
+      { "+", mode = { "n", "x" }, desc = "Send-to-REPL Operator" },
+      { "++", desc = "Send Line to REPL" },
+    },
+  },
+  { -- Docstring generation
+    'danymat/neogen',
+    opts = true,
+    keys = {
+      {
+        '<leader>a',
+        function()
+          require('neogen').generate()
+        end,
+        desc = 'Add Docstring',
+      },
+    },
+  },
+  { -- f-string conversion
+    'chrisgrieser/nvim-puppeteer',
+    dependencies = 'nvim-treesitter/nvim-treesitter',
+  },
 }, {
   ui = {
     -- If you are using a Nerd Font: set icons to an empty table which will use the
@@ -913,6 +1017,28 @@ require('lazy').setup({
       lazy = '💤 ',
     },
   },
+})
+
+-- Python-specific settings
+vim.api.nvim_create_autocmd('FileType', {
+  pattern = 'python',
+  callback = function()
+    vim.opt_local.expandtab = true
+    vim.opt_local.shiftwidth = 4
+    vim.opt_local.tabstop = 4
+    vim.opt_local.softtabstop = 4
+    vim.opt_local.foldmethod = 'indent'
+
+    local iabbrev = function(lhs, rhs)
+      vim.keymap.set('ia', lhs, rhs, { buffer = true })
+    end
+    iabbrev('true', 'True')
+    iabbrev('false', 'False')
+    iabbrev('--', '#')
+    iabbrev('null', 'None')
+    iabbrev('none', 'None')
+    iabbrev('nil', 'None')
+  end,
 })
 
 -- The line beneath this is called `modeline`. See `:help modeline`
